@@ -181,6 +181,8 @@ export default function MembersScreen() {
           </Text>
         ) : null}
       />
+
+      <Text style={styles.baseUrlHint}>Sumber data API: {BASE_URL}</Text>
     </View>
   );
 }

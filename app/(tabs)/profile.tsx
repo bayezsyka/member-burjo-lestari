@@ -1,4 +1,5 @@
 // app/(tabs)/profile.tsx
+import { Ionicons } from "@expo/vector-icons";
 import React from "react";
 import { ScrollView, StyleSheet, Text, View } from "react-native";
 
@@ -10,6 +11,17 @@ import {
 } from "../../constants/appInfo";
 
 export default function ProfileScreen() {
+  const handleOpenLink = async (url: string) => {
+    try {
+      const supported = await Linking.canOpenURL(url);
+      if (supported) {
+        await Linking.openURL(url);
+      }
+    } catch (error) {
+      console.warn("Gagal membuka tautan", error);
+    }
+  };
+
   return (
     <ScrollView contentContainerStyle={styles.container}>
       <Text style={styles.title}>{APP_INFO.name}</Text>
