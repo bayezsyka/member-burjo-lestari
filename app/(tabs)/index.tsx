@@ -1,10 +1,11 @@
 // app/(tabs)/index.tsx
 import { useRouter } from "expo-router";
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
   FlatList,
+  RefreshControl,
   StyleSheet,
   Text,
   TextInput,
@@ -17,32 +18,42 @@ type Member = {
   id: string;
   name: string;
   phone?: string | null;
+  membership_active_until?: string | null;
+  created_at?: string;
 };
 
 export default function MembersScreen() {
   const router = useRouter();
 
   const [members, setMembers] = useState<Member[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [fetching, setFetching] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
 
-  async function fetchMembers() {
+  const fetchMembers = useCallback(async (options?: { silent?: boolean }) => {
+    const silent = options?.silent;
     try {
-      setLoading(true);
-      console.log("Fetch members dari", `${BASE_URL}/api/members`);
+      if (silent) {
+        setRefreshing(true);
+      } else {
+        setFetching(true);
+      }
       const response = await fetch(`${BASE_URL}/api/members`);
-      console.log("Status fetch members", response.status);
       const json = await response.json();
-      console.log("Data members", json);
       setMembers(json);
     } catch (error) {
       console.error("Error fetch members", error);
       Alert.alert("Error", "Gagal mengambil data member");
     } finally {
-      setLoading(false);
+      if (silent) {
+        setRefreshing(false);
+      } else {
+        setFetching(false);
+      }
     }
-  }
+  }, []);
 
   async function handleAddMember() {
     if (!name.trim()) {
@@ -51,8 +62,7 @@ export default function MembersScreen() {
     }
 
     try {
-      setLoading(true);
-      console.log("POST member ke", `${BASE_URL}/api/members`);
+      setSubmitting(true);
       const response = await fetch(`${BASE_URL}/api/members`, {
         method: "POST",
         headers: {
@@ -65,7 +75,6 @@ export default function MembersScreen() {
       });
 
       const body = await response.json();
-      console.log("Response POST member", response.status, body);
 
       if (!response.ok) {
         Alert.alert("Error", body.message || "Gagal menambah member");
@@ -81,28 +90,48 @@ export default function MembersScreen() {
       console.error("Error add member", error);
       Alert.alert("Error", "Terjadi kesalahan saat menambah member");
     } finally {
-      setLoading(false);
+      setSubmitting(false);
     }
   }
 
   useEffect(() => {
     fetchMembers();
-  }, []);
+  }, [fetchMembers]);
 
-  const renderItem = ({ item }: { item: Member }) => (
-    <TouchableOpacity
-      style={styles.memberItem}
-      onPress={() =>
-        router.push({
-          pathname: "/member/[id]",
-          params: { id: item.id, name: item.name },
-        })
-      }
-    >
-      <Text style={styles.memberName}>{item.name}</Text>
-      {item.phone ? <Text style={styles.memberPhone}>{item.phone}</Text> : null}
-    </TouchableOpacity>
-  );
+  const today = useMemo(() => new Date().toISOString().split("T")[0], []);
+
+  const getMembershipStatus = (until?: string | null) => {
+    if (!until) return { text: "Belum aktif", color: "#6b7280" };
+    const untilDate = new Date(`${until}T00:00:00`);
+    const todayDate = new Date(`${today}T00:00:00`);
+    if (untilDate >= todayDate) {
+      return { text: `Aktif s/d ${until}`, color: "#16a34a" };
+    }
+    return { text: `Kedaluwarsa ${until}`, color: "#dc2626" };
+  };
+
+  const renderItem = ({ item }: { item: Member }) => {
+    const membershipInfo = getMembershipStatus(item.membership_active_until);
+    return (
+      <TouchableOpacity
+        style={styles.memberItem}
+        onPress={() =>
+          router.push({
+            pathname: "/member/[id]",
+            params: { id: item.id, name: item.name },
+          })
+        }
+      >
+        <Text style={styles.memberName}>{item.name}</Text>
+        {item.phone ? (
+          <Text style={styles.memberPhone}>{item.phone}</Text>
+        ) : null}
+        <Text style={[styles.memberStatus, { color: membershipInfo.color }]}>
+          {membershipInfo.text}
+        </Text>
+      </TouchableOpacity>
+    );
+  };
 
   return (
     <View style={styles.container}>
@@ -125,19 +154,35 @@ export default function MembersScreen() {
         />
 
         <TouchableOpacity style={styles.button} onPress={handleAddMember}>
-          <Text style={styles.buttonText}>Simpan</Text>
+          <Text style={styles.buttonText}>
+            {submitting ? "Menyimpan..." : "Simpan"}
+          </Text>
         </TouchableOpacity>
       </View>
 
-      {loading && <ActivityIndicator size="small" />}
+      {fetching && members.length === 0 && (
+        <ActivityIndicator size="small" style={{ marginBottom: 12 }} />
+      )}
 
       <FlatList
         data={members}
         keyExtractor={(item) => item.id}
         renderItem={renderItem}
         contentContainerStyle={styles.list}
-        ListEmptyComponent={!loading ? <Text>Belum ada member.</Text> : null}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={() => fetchMembers({ silent: true })}
+          />
+        }
+        ListEmptyComponent={!fetching ? (
+          <Text style={styles.emptyText}>
+            Belum ada member. Tambahkan satu untuk mulai memakai aplikasi.
+          </Text>
+        ) : null}
       />
+
+      <Text style={styles.baseUrlHint}>Sumber data API: {BASE_URL}</Text>
     </View>
   );
 }
@@ -198,5 +243,20 @@ const styles = StyleSheet.create({
   memberPhone: {
     fontSize: 14,
     color: "#6b7280",
+  },
+  memberStatus: {
+    fontSize: 13,
+    marginTop: 2,
+  },
+  emptyText: {
+    textAlign: "center",
+    color: "#6b7280",
+    marginTop: 32,
+  },
+  baseUrlHint: {
+    textAlign: "center",
+    color: "#6b7280",
+    marginTop: 12,
+    fontSize: 12,
   },
 });
