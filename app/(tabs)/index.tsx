@@ -1,98 +1,202 @@
-import { Image } from 'expo-image';
-import { Platform, StyleSheet } from 'react-native';
+// app/(tabs)/index.tsx
+import { useRouter } from "expo-router";
+import React, { useEffect, useState } from "react";
+import {
+  ActivityIndicator,
+  Alert,
+  FlatList,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from "react-native";
+import { BASE_URL } from "../../constants/api";
 
-import { HelloWave } from '@/components/hello-wave';
-import ParallaxScrollView from '@/components/parallax-scroll-view';
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { Link } from 'expo-router';
+type Member = {
+  id: string;
+  name: string;
+  phone?: string | null;
+};
 
-export default function HomeScreen() {
+export default function MembersScreen() {
+  const router = useRouter();
+
+  const [members, setMembers] = useState<Member[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [name, setName] = useState("");
+  const [phone, setPhone] = useState("");
+
+  async function fetchMembers() {
+    try {
+      setLoading(true);
+      console.log("Fetch members dari", `${BASE_URL}/api/members`);
+      const response = await fetch(`${BASE_URL}/api/members`);
+      console.log("Status fetch members", response.status);
+      const json = await response.json();
+      console.log("Data members", json);
+      setMembers(json);
+    } catch (error) {
+      console.error("Error fetch members", error);
+      Alert.alert("Error", "Gagal mengambil data member");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleAddMember() {
+    if (!name.trim()) {
+      Alert.alert("Validasi", "Nama wajib diisi");
+      return;
+    }
+
+    try {
+      setLoading(true);
+      console.log("POST member ke", `${BASE_URL}/api/members`);
+      const response = await fetch(`${BASE_URL}/api/members`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          name: name.trim(),
+          phone: phone.trim(),
+        }),
+      });
+
+      const body = await response.json();
+      console.log("Response POST member", response.status, body);
+
+      if (!response.ok) {
+        Alert.alert("Error", body.message || "Gagal menambah member");
+        return;
+      }
+
+      const newMember: Member = body;
+      setMembers((prev) => [newMember, ...prev]);
+      setName("");
+      setPhone("");
+      Alert.alert("Sukses", "Member berhasil ditambahkan");
+    } catch (error) {
+      console.error("Error add member", error);
+      Alert.alert("Error", "Terjadi kesalahan saat menambah member");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    fetchMembers();
+  }, []);
+
+  const renderItem = ({ item }: { item: Member }) => (
+    <TouchableOpacity
+      style={styles.memberItem}
+      onPress={() =>
+        router.push({
+          pathname: "/member/[id]",
+          params: { id: item.id, name: item.name },
+        })
+      }
+    >
+      <Text style={styles.memberName}>{item.name}</Text>
+      {item.phone ? <Text style={styles.memberPhone}>{item.phone}</Text> : null}
+    </TouchableOpacity>
+  );
+
   return (
-    <ParallaxScrollView
-      headerBackgroundColor={{ light: '#A1CEDC', dark: '#1D3D47' }}
-      headerImage={
-        <Image
-          source={require('@/assets/images/partial-react-logo.png')}
-          style={styles.reactLogo}
-        />
-      }>
-      <ThemedView style={styles.titleContainer}>
-        <ThemedText type="title">Welcome!</ThemedText>
-        <HelloWave />
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 1: Try it</ThemedText>
-        <ThemedText>
-          Edit <ThemedText type="defaultSemiBold">app/(tabs)/index.tsx</ThemedText> to see changes.
-          Press{' '}
-          <ThemedText type="defaultSemiBold">
-            {Platform.select({
-              ios: 'cmd + d',
-              android: 'cmd + m',
-              web: 'F12',
-            })}
-          </ThemedText>{' '}
-          to open developer tools.
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <Link href="/modal">
-          <Link.Trigger>
-            <ThemedText type="subtitle">Step 2: Explore</ThemedText>
-          </Link.Trigger>
-          <Link.Preview />
-          <Link.Menu>
-            <Link.MenuAction title="Action" icon="cube" onPress={() => alert('Action pressed')} />
-            <Link.MenuAction
-              title="Share"
-              icon="square.and.arrow.up"
-              onPress={() => alert('Share pressed')}
-            />
-            <Link.Menu title="More" icon="ellipsis">
-              <Link.MenuAction
-                title="Delete"
-                icon="trash"
-                destructive
-                onPress={() => alert('Delete pressed')}
-              />
-            </Link.Menu>
-          </Link.Menu>
-        </Link>
+    <View style={styles.container}>
+      <Text style={styles.title}>Daftar Member</Text>
 
-        <ThemedText>
-          {`Tap the Explore tab to learn more about what's included in this starter app.`}
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 3: Get a fresh start</ThemedText>
-        <ThemedText>
-          {`When you're ready, run `}
-          <ThemedText type="defaultSemiBold">npm run reset-project</ThemedText> to get a fresh{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> directory. This will move the current{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> to{' '}
-          <ThemedText type="defaultSemiBold">app-example</ThemedText>.
-        </ThemedText>
-      </ThemedView>
-    </ParallaxScrollView>
+      <View style={styles.form}>
+        <Text style={styles.formTitle}>Tambah Member</Text>
+        <TextInput
+          style={styles.input}
+          placeholder="Nama"
+          value={name}
+          onChangeText={setName}
+        />
+        <TextInput
+          style={styles.input}
+          placeholder="No HP"
+          value={phone}
+          onChangeText={setPhone}
+          keyboardType="phone-pad"
+        />
+
+        <TouchableOpacity style={styles.button} onPress={handleAddMember}>
+          <Text style={styles.buttonText}>Simpan</Text>
+        </TouchableOpacity>
+      </View>
+
+      {loading && <ActivityIndicator size="small" />}
+
+      <FlatList
+        data={members}
+        keyExtractor={(item) => item.id}
+        renderItem={renderItem}
+        contentContainerStyle={styles.list}
+        ListEmptyComponent={!loading ? <Text>Belum ada member.</Text> : null}
+      />
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  titleContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
+  container: {
+    flex: 1,
+    padding: 16,
+    backgroundColor: "#f9fafb",
   },
-  stepContainer: {
-    gap: 8,
+  title: {
+    fontSize: 22,
+    fontWeight: "bold",
+    marginBottom: 12,
+  },
+  form: {
+    marginBottom: 16,
+    padding: 12,
+    borderRadius: 8,
+    backgroundColor: "#e5e7eb",
+  },
+  formTitle: {
+    fontSize: 16,
+    fontWeight: "600",
     marginBottom: 8,
   },
-  reactLogo: {
-    height: 178,
-    width: 290,
-    bottom: 0,
-    left: 0,
-    position: 'absolute',
+  input: {
+    borderWidth: 1,
+    borderColor: "#d1d5db",
+    borderRadius: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    marginBottom: 8,
+    backgroundColor: "#fff",
+  },
+  button: {
+    backgroundColor: "#2563eb",
+    paddingVertical: 10,
+    borderRadius: 6,
+    alignItems: "center",
+  },
+  buttonText: {
+    color: "#fff",
+    fontWeight: "600",
+  },
+  list: {
+    paddingVertical: 8,
+  },
+  memberItem: {
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: "#e5e7eb",
+  },
+  memberName: {
+    fontSize: 16,
+    fontWeight: "600",
+  },
+  memberPhone: {
+    fontSize: 14,
+    color: "#6b7280",
   },
 });
