@@ -64,12 +64,6 @@ constants/
    npm start
    ```
 
-   Jika jaringan lokal memblok request keluar (sering memicu error `TypeError: fetch failed` ketika Expo mencoba mengecek versi module), jalankan mode offline berikut:
-
-   ```bash
-   npm run start:offline
-   ```
-
 4. Buka aplikasi melalui Expo Go / emulator. Pastikan device berada di jaringan yang sama dengan backend.
 
 ## Catatan tambahan
