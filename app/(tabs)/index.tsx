@@ -253,10 +253,4 @@ const styles = StyleSheet.create({
     color: "#6b7280",
     marginTop: 32,
   },
-  baseUrlHint: {
-    textAlign: "center",
-    color: "#6b7280",
-    marginTop: 12,
-    fontSize: 12,
-  },
 });
