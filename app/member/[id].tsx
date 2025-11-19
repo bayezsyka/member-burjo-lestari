@@ -1,9 +1,10 @@
 // app/member/[id].tsx
 import { useLocalSearchParams, useRouter } from "expo-router";
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
@@ -35,6 +36,7 @@ export default function MemberDetailScreen() {
   const memberNameFromList = params.name;
 
   const [loading, setLoading] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const [paying, setPaying] = useState(false);
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -43,36 +45,54 @@ export default function MemberDetailScreen() {
   const [isEditing, setIsEditing] = useState(false);
   const [editName, setEditName] = useState("");
   const [editPhone, setEditPhone] = useState("");
+  const [paidAt, setPaidAt] = useState("");
 
-  async function fetchSummary() {
-    if (!memberId) return;
+  const fetchSummary = useCallback(
+    async (options?: { silent?: boolean }) => {
+      if (!memberId) return;
 
-    try {
-      setLoading(true);
-      const response = await fetch(
-        `${BASE_URL}/api/members/${memberId}/summary`
-      );
-      const body = await response.json();
+      try {
+        if (options?.silent) {
+          setRefreshing(true);
+        } else {
+          setLoading(true);
+        }
+        const response = await fetch(
+          `${BASE_URL}/api/members/${memberId}/summary`
+        );
+        const body = await response.json();
 
-      if (!response.ok) {
-        console.log("Error fetch summary", body);
-        Alert.alert("Error", body.message || "Gagal mengambil data member");
-        return;
+        if (!response.ok) {
+          console.log("Error fetch summary", body);
+          Alert.alert("Error", body.message || "Gagal mengambil data member");
+          return;
+        }
+
+        setSummary(body);
+        setEditName(body.member.name || "");
+        setEditPhone(body.member.phone || "");
+      } catch (error) {
+        console.error("Error fetch summary", error);
+        Alert.alert("Error", "Terjadi kesalahan saat mengambil data member");
+      } finally {
+        if (options?.silent) {
+          setRefreshing(false);
+        } else {
+          setLoading(false);
+        }
       }
-
-      setSummary(body);
-      setEditName(body.member.name || "");
-      setEditPhone(body.member.phone || "");
-    } catch (error) {
-      console.error("Error fetch summary", error);
-      Alert.alert("Error", "Terjadi kesalahan saat mengambil data member");
-    } finally {
-      setLoading(false);
-    }
-  }
+    },
+    [memberId]
+  );
 
   async function handlePayMembership() {
     if (!memberId) return;
+
+    const trimmedDate = paidAt.trim();
+    if (trimmedDate && !/^\d{4}-\d{2}-\d{2}$/.test(trimmedDate)) {
+      Alert.alert("Validasi", "Format tanggal harus YYYY-MM-DD");
+      return;
+    }
 
     try {
       setPaying(true);
@@ -83,7 +103,9 @@ export default function MemberDetailScreen() {
           headers: {
             "Content-Type": "application/json",
           },
-          body: JSON.stringify({}),
+          body: JSON.stringify(
+            trimmedDate ? { paid_at: trimmedDate } : {}
+          ),
         }
       );
 
@@ -96,6 +118,7 @@ export default function MemberDetailScreen() {
       }
 
       Alert.alert("Sukses", "Pembayaran membership berhasil");
+      setPaidAt("");
       fetchSummary();
     } catch (error) {
       console.error("Error pay membership", error);
@@ -182,7 +205,7 @@ export default function MemberDetailScreen() {
               let body = null;
               try {
                 body = await response.json();
-              } catch (e) {
+              } catch {
                 body = null;
               }
 
@@ -211,7 +234,7 @@ export default function MemberDetailScreen() {
 
   useEffect(() => {
     fetchSummary();
-  }, [memberId]);
+  }, [fetchSummary]);
 
   const statusText =
     summary?.membership_status === "active" ? "Aktif" : "Tidak aktif";
@@ -223,7 +246,15 @@ export default function MemberDetailScreen() {
     summary?.member.name || memberNameFromList || "Detail Member";
 
   return (
-    <ScrollView contentContainerStyle={styles.container}>
+    <ScrollView
+      contentContainerStyle={styles.container}
+      refreshControl={
+        <RefreshControl
+          refreshing={refreshing}
+          onRefresh={() => fetchSummary({ silent: true })}
+        />
+      }
+    >
       <Text style={styles.title}>{namaTampil}</Text>
 
       {loading && <ActivityIndicator size="large" style={{ marginTop: 16 }} />}
@@ -332,6 +363,20 @@ export default function MemberDetailScreen() {
           </TouchableOpacity>
         )}
 
+        <View style={styles.paymentBox}>
+          <Text style={styles.label}>Tanggal bayar (opsional)</Text>
+          <TextInput
+            style={styles.input}
+            placeholder="YYYY-MM-DD"
+            value={paidAt}
+            onChangeText={setPaidAt}
+          />
+          <Text style={styles.helperText}>
+            Kosongkan untuk memakai tanggal hari ini. Kamu juga bisa mengisi
+            tanggal mundur bila pembayaran dilakukan sebelumnya.
+          </Text>
+        </View>
+
         <TouchableOpacity
           style={[styles.button, { backgroundColor: "#22c55e" }]}
           onPress={handlePayMembership}
@@ -418,5 +463,13 @@ const styles = StyleSheet.create({
   buttonText: {
     color: "#ffffff",
     fontWeight: "600",
+  },
+  paymentBox: {
+    gap: 4,
+    marginBottom: 8,
+  },
+  helperText: {
+    fontSize: 13,
+    color: "#4b5563",
   },
 });
